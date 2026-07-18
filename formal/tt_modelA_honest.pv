@@ -1,0 +1,81 @@
+(* ==========================================================================
+   Triangulating Trust -- Model A: normal operation, external attacker only.
+   Verified with ProVerif 2.05.
+
+   Proves, against a Dolev-Yao attacker that observes and injects on the bus
+   and that CHOOSES the payloads which get tagged (adaptive chosen-message,
+   matching the oracle O_Tag of Definition 1):
+
+     Q1  secrecy of the per-ECU fuzzy-extractor seed R_i, DESPITE the helper
+         data hd_i being published in the clear on the bus;
+     Q2  secrecy of the group Catalan-key K_G;
+     Q3  INJECTIVE agreement on (sender, payload, nonce).  Injectivity IS the
+         replay property: a replayed frame would yield a second accept with
+         no matching send.
+
+   The replay window is modelled as it is implemented: a receiver-side cache
+   of consumed nonces.  'set preciseActions' is required -- without it
+   ProVerif's Horn abstraction loses the multiplicity of table reads and
+   injectivity is not provable for reasons internal to the tool.
+   ========================================================================== *)
+
+set preciseActions = true.
+
+free bus: channel.
+
+type seed.
+type gkey.
+type ecuid.
+type mtag.
+
+fun helper(seed): bitstring.                       (* public helper data     *)
+fun kdf(seed, seed, seed): gkey.                   (* K_G from member seeds  *)
+fun mac(gkey, ecuid, bitstring, bitstring): mtag.  (* tag(K_G, ID, D, nc)    *)
+
+free ECU1, ECU2, ECU3: ecuid.
+free ok: bitstring.
+
+free r1: seed [private].
+free r2: seed [private].
+free r3: seed [private].
+
+free idch: channel [private].   (* the set of legitimate sender identities   *)
+free lock: channel [private].   (* serialises the check-then-insert on the cache *)
+
+table seen(bitstring).          (* receiver-side replay cache / nonce window *)
+
+event sentBy(ecuid, bitstring, bitstring).
+event acceptedFrom(ecuid, bitstring, bitstring).
+
+query attacker(r1).
+query attacker(kdf(r1, r2, r3)).
+query i: ecuid, d: bitstring, nc: bitstring;
+      inj-event(acceptedFrom(i, d, nc)) ==> inj-event(sentBy(i, d, nc)).
+
+let sender(kG: gkey) =
+    in(idch, me: ecuid);
+    in(bus, d: bitstring);            (* the attacker chooses the payload    *)
+    new nc: bitstring;                (* monotone nonce                      *)
+    event sentBy(me, d, nc);
+    out(bus, (me, d, nc, mac(kG, me, d, nc))).
+
+let receiver(kG: gkey) =
+    in(bus, (xi: ecuid, xd: bitstring, xnc: bitstring, xt: mtag));
+    if xt = mac(kG, xi, xd, xnc) then       (* Step 1: tag check, Alg. 3     *)
+    in(lock, l: bitstring);                 (* the cache check is atomic     *)
+    get seen(=xnc) in                       (* Step 2: freshness check       *)
+        out(lock, l)                        (* stale nonce -> reject         *)
+    else
+        insert seen(xnc);
+        event acceptedFrom(xi, xd, xnc);
+        out(lock, l);
+        out(bus, ok).
+
+process
+    out(bus, helper(r1)) |
+    out(bus, helper(r2)) |
+    out(bus, helper(r3)) |
+    (!out(idch, ECU1)) | (!out(idch, ECU2)) | (!out(idch, ECU3)) |
+    out(lock, ok) |                             (* exactly one lock token    *)
+    let kG = kdf(r1, r2, r3) in
+    ( (!sender(kG)) | (!receiver(kG)) )

@@ -1,0 +1,121 @@
+(* ==========================================================================
+   Triangulating Trust -- Model B: ECU capture and revocation.
+   Verified with ProVerif 2.05.
+
+   This model is written to EXHIBIT the limitation of group keying, not to
+   hide it.  Three phases:
+
+     phase 0 : normal operation on group key K_G1 = KDF(r1,r2,r3)
+     phase 1 : ECU3 is captured.  The adversary obtains K_G1.  It does NOT
+               obtain r1 or r2 -- individual seeds never leave their devices.
+     phase 2 : the gateway revokes ECU3 and rekeys to K_G2 = KDF(r1,r2,r4),
+               unicasting it to each survivor encrypted under that survivor's
+               individual seed.  (It cannot be sent under K_G1: the revoked
+               node knows K_G1.)
+
+   Expected results, all of which are reported in the paper:
+     Q1  attacker(K_G1)      -- TRUE  (leaks: that is what capture means)
+     Q2  attribution in ph.1 -- FALSE (the attribution gap: a captured member
+                                       forges frames under ECU1's identifier)
+     Q3  attacker(K_G2)      -- FALSE (revocation restores key secrecy)
+     Q4  attribution in ph.2 -- TRUE  (revocation restores authentication)
+   ========================================================================== *)
+
+set preciseActions = true.
+
+free bus: channel.
+
+type seed.
+type gkey.
+type ecuid.
+type mtag.
+
+fun kdf(seed, seed, seed): gkey.
+fun mac(gkey, ecuid, bitstring, bitstring): mtag.
+
+(* Unicast redistribution of the new group key under an individual seed. *)
+fun senc(seed, gkey): bitstring.
+reduc forall r: seed, k: gkey; sdec(r, senc(r, k)) = k.
+
+free ECU1, ECU2, ECU3, ECU4: ecuid.
+free ok: bitstring.
+
+free r1: seed [private].
+free r2: seed [private].
+free r3: seed [private].          (* captured ECU                            *)
+free r4: seed [private].          (* replacement fitted at service           *)
+
+free idch:  channel [private].
+free idch2: channel [private].
+
+event sentBy(ecuid, bitstring, bitstring).
+event acceptedFrom(ecuid, bitstring, bitstring).
+event sentBy2(ecuid, bitstring, bitstring).
+event acceptedFrom2(ecuid, bitstring, bitstring).
+
+(* Q1: the old group key leaks on capture.  Expected TRUE (i.e. "not
+   attacker(...)" is FALSE).  Stated so the reader sees we are not pretending
+   otherwise. *)
+query attacker(kdf(r1, r2, r3)).
+
+(* Q2: THE ATTRIBUTION GAP.  Can the adversary make a receiver accept a frame
+   attributed to ECU1 that ECU1 never sent?  Expected: yes -> query FALSE. *)
+query d: bitstring, nc: bitstring;
+      event(acceptedFrom(ECU1, d, nc)) ==> event(sentBy(ECU1, d, nc)).
+
+(* Q3: does revocation restore secrecy of the group key?  Expected TRUE. *)
+query attacker(kdf(r1, r2, r4)).
+
+(* Q4: does revocation restore sender authentication?  Expected TRUE. *)
+query i: ecuid, d: bitstring, nc: bitstring;
+      event(acceptedFrom2(i, d, nc)) ==> event(sentBy2(i, d, nc)).
+
+let sender(kG: gkey) =
+    in(idch, me: ecuid);
+    in(bus, d: bitstring);
+    new nc: bitstring;
+    event sentBy(me, d, nc);
+    out(bus, (me, d, nc, mac(kG, me, d, nc))).
+
+let receiver(kG: gkey) =
+    in(bus, (xi: ecuid, xd: bitstring, xnc: bitstring, xt: mtag));
+    if xt = mac(kG, xi, xd, xnc) then
+      event acceptedFrom(xi, xd, xnc);
+      out(bus, ok).
+
+let sender2(kG2: gkey) =
+    in(idch2, me: ecuid);
+    in(bus, d: bitstring);
+    new nc: bitstring;
+    event sentBy2(me, d, nc);
+    out(bus, (me, d, nc, mac(kG2, me, d, nc))).
+
+let receiver2(kG2: gkey) =
+    in(bus, (xi: ecuid, xd: bitstring, xnc: bitstring, xt: mtag));
+    if xt = mac(kG2, xi, xd, xnc) then
+      event acceptedFrom2(xi, xd, xnc);
+      out(bus, ok).
+
+(* Capture: the adversary gets the group key, and nothing else. *)
+let capture(kG: gkey) =
+    out(bus, kG).                 (* ECU3 is a malicious member from the outset *)
+
+(* Revocation: rekey over the surviving members, distribute under the
+   individual seeds.  The revoked node holds K_G1 but not r1, r2, r4. *)
+let revoke(kG2: gkey) =
+    phase 1;
+    out(bus, senc(r1, kG2));
+    out(bus, senc(r2, kG2));
+    out(bus, senc(r4, kG2)).
+
+process
+    (!out(idch, ECU1)) | (!out(idch, ECU2)) | (!out(idch, ECU3)) |
+    (!out(idch2, ECU1)) | (!out(idch2, ECU2)) | (!out(idch2, ECU4)) |
+    let kG  = kdf(r1, r2, r3) in
+    let kG2 = kdf(r1, r2, r4) in
+    (
+        (!sender(kG))   | (!receiver(kG))   |
+        capture(kG)     | revoke(kG2)       |
+        (phase 1; !sender2(kG2))            |
+        (phase 1; !receiver2(kG2))
+    )

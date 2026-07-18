@@ -1,0 +1,79 @@
+{
+  "t_bits": 16,
+  "tt_selfcheck_mismatches": 0,
+  "masquerade_TT": {
+    "prec": 1.0,
+    "rec": 0.9999674563915647,
+    "f1": 0.9999837279310064,
+    "fpr": 0.0,
+    "tp": 30727,
+    "fp": 0,
+    "fn": 1,
+    "tn": 1539673
+  },
+  "masquerade_HMAC": {
+    "prec": 1.0,
+    "rec": 0.9998745924253825,
+    "f1": 0.9999372922806797,
+    "fpr": 0.0,
+    "tp": 7973,
+    "fp": 0,
+    "fn": 1,
+    "tn": 243608
+  },
+  "masquerade_HMAC_note": "computed on 251,582-frame budgeted subset",
+  "_masq_per_capture": {
+    "correlated_signal_attack_1_masquerade": {
+      "frames": 79176,
+      "injected": 2086
+    },
+    "correlated_signal_attack_2_masquerade": {
+      "frames": 67517,
+      "injected": 2139
+    },
+    "correlated_signal_attack_3_masquerade": {
+      "frames": 40565,
+      "injected": 1263
+    },
+    "max_engine_coolant_temp_attack_masquerade": {
+      "frames": 61881,
+      "injected": 43
+    },
+    "max_speedometer_attack_1_masquerade": {
+      "frames": 210953,
+      "injected": 2443
+    },
+    "max_speedometer_attack_2_masquerade": {
+      "frames": 142754,
+      "injected": 3139
+    },
+    "max_speedometer_attack_3_masquerade": {
+      "frames": 207444,
+      "injected": 6107
+    },
+    "reverse_light_off_attack_1_masquerade": {
+      "frames": 67230,
+      "injected": 672
+    },
+    "reverse_light_off_attack_2_masquerade": {
+      "frames": 97257,
+      "injected": 2370
+    },
+    "reverse_light_off_attack_3_masquerade": {
+      "frames": 138421,
+      "injected": 2434
+    },
+    "reverse_light_on_attack_1_masquerade": {
+      "frames": 131246,
+      "injected": 1992
+    },
+    "reverse_light_on_attack_2_masquerade": {
+      "frames": 172256,
+      "injected": 3690
+    },
+    "reverse_light_on_attack_3_masquerade": {
+      "frames": 153701,
+      "injected": 2350
+    }
+  }
+}

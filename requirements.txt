@@ -1,0 +1,7 @@
+# Core (tag reference, FRR, beta containment)
+numpy>=1.24
+
+# Machine-learning baselines (detection_eval.py). Optional: only needed to
+# reproduce the RF / LightGBM comparison rows.
+scikit-learn>=1.3
+lightgbm>=4.0
